@@ -4,6 +4,7 @@ from ismn.interface import ISMN_Interface
 import json
 import time
 from dataclasses import dataclass, fields
+from collections import defaultdict
 
 
 class MyDataTypes:
@@ -152,6 +153,30 @@ class Tools:
         :rtype: bool
         """
         return os.path.isdir(os.path.join(path, dir_name))
+
+    def multi_dict(self, K: int, type: Any) -> defaultdict:
+        """Create a multi-dimensional dictionary, based on a default dictionary.
+        :param K: The number of dimensions
+        :type K: int
+        :param type: The type of the item to be contained in the default dictionary, i.e. int, string, list or dict
+        :type type: type
+        :return: A multi-dimensional default dictionary
+        :rtype: defaultdict
+        """
+        if K == 1:
+            return defaultdict(type)
+        else:
+            return defaultdict(lambda: self.multi_dict(K - 1, type))
+
+    def c_prettyprint(self, dictionary: dict, indent: Optional[int] = 2) -> None:
+        """Prints the dictionary in a pretty format.
+        :param dictionary: The dictionary to be printed
+        :type dictionary: dict
+        :param indent: The indentation used to print the dictionary, by default 2
+        :type indent: Optional[int]
+        :return: None
+        :rtype: None"""
+        print(json.dumps(dictionary, indent=indent))
 
 
 class Geography(Tools):
