@@ -1,3 +1,3 @@
-__all__ = 'MyISMN'
+__all__ = "MyISMN"
 
 from .myismn import *
