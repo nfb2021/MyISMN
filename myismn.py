@@ -5,7 +5,8 @@ import json
 import time
 from dataclasses import dataclass, fields
 from collections import defaultdict
-
+from natsort import natsorted
+from tqdm import trange
 
 class MyDataTypes:
     """Definition of my own data types for variables"""
@@ -43,6 +44,15 @@ class Tools:
         __database = ISMN_Interface(__database_name, parallel=True)
 
         return __database, __database_name
+    
+
+    def __get_networks(self) -> tuple[list, list]:
+        __root = os.getcwd()
+        __path = os.path.join(__root, self.database_name)
+        os.chdir(__path)
+        __networks = natsorted([x for x in os.listdir(__path) if os.path.isdir(x) and x not in ['python_metadata', 'json_dicts']])
+        os.chdir(__root)
+        return __networks, len(__networks)
 
     def get_all_numbers(
         self, database: MyDataTypes.IsmnDataBase
@@ -55,32 +65,37 @@ class Tools:
         """
 
         __network_check = "go"
-        no_of_networks: int = 0
+
+        network_lst, no_of_networks = self.__get_networks()
+        # print(network_lst, no_of_networks)
         no_of_stations: int = 0
         no_of_sensors: int = 0
         stations_dict: dict = {}
         sensors_dict: dict = {}
 
-        while __network_check == "go":
+        for ii in trange(no_of_networks, desc = 'iterating over networks:'):
+            network_name = network_lst[ii]
             try:
-                network = database[no_of_networks]
+                network = database[network_name]
+            except KeyError:
+                print(f"\n\n\t The network {network_name} was not loaded by the ISMN module\n\n")
+                continue
+                
+            # print(network_name, network)
 
-                for s, _ in enumerate(network):
+            for s, _ in enumerate(network):
+                if ValueError:
+                    no_of_stations += 1
+
+                station = network[s]
+                for ss, _ in enumerate(station):
                     if ValueError:
-                        no_of_stations += 1
+                        no_of_sensors += 1
 
-                    station = network[s]
-                    for ss, _ in enumerate(station):
-                        if ValueError:
-                            no_of_sensors += 1
+                sensors_dict[f"{network.name}:{station.name}"] = ss + 1
 
-                    sensors_dict[f"{network.name}:{station.name}"] = ss + 1
+            stations_dict[network.name] = s + 1
 
-                stations_dict[network.name] = s + 1
-                no_of_networks += 1
-
-            except IndexError:
-                __network_check = "stop"
 
         self._func_get_all_numbers_ran = True
 
