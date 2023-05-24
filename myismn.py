@@ -498,3 +498,74 @@ class DataReader(Tools):
                 "sensors.json",
                 os.path.join(self.database_name, "json_dicts"),
             )
+
+class FunWithFlags(DataReader):
+    f'''Small class centered around flags of the ISMN databse.
+    Conserning soil moisture, there could be following flags:
+    
+    Dynamic variables
+    -----------------
+    G\tGood
+    M\tParameter value missing
+
+    C - reported value exceeds output format field size
+    ---------------------------------------------------
+    C01\tsoil moisture < 0.0 m^3/m^3
+    C02\tsoil moisture > 0.6 m^3/m^3
+    C03\tsoil moisture > saturation point (derived from HWSD parameter values)
+    
+    D - questionable/dubious - geophysical based
+    --------------------------------------------
+    D01\tin situ soil temperature(*) < 0°C
+    D02\tin situ air temperature < 0°C
+    D03\tGLDAS soil temperature(*) < 0°C
+    D04\tsoil moisture shows peaks without precipitation event (in situ) in the preceding 24 hours
+    D05\tsoil moisture shows peaks without precipitation event (GLDAS) in the preceding 24 hours
+
+    D - questionable/dubious - spectrum based
+    -----------------------------------------
+    D06\ta spike is detected in soil moisture spectrum
+    D07\ta negative jump is detected in soil moisture spectrum
+    D08\ta positive jump is detected in soil moisture spectrum
+    D09\tlow constant values (for a minimum time of 12 hours) occur in soil moisture spectrum
+    D10\tsaturated plateau (for a minimum time length of 12 hours) occurs in soil moisture spectrum
+
+    (*) at corresponding depth layer    
+    '''
+
+    def __init__(self):
+        super().__init__()
+
+    def __repr__(self):
+        f'''Small class centered around flags of the ISMN databse.
+        Conserning soil moisture, there could be following flags:
+        
+        Dynamic variables
+        -----------------
+        G\tGood
+        M\tParameter value missing
+
+        C - reported value exceeds output format field size
+        ---------------------------------------------------
+        C01\tsoil moisture < 0.0 m^3/m^3
+        C02\tsoil moisture > 0.6 m^3/m^3
+        C03\tsoil moisture > saturation point (derived from HWSD parameter values)
+        
+        D - questionable/dubious - geophysical based
+        --------------------------------------------
+        D01\tin situ soil temperature(*) < 0°C
+        D02\tin situ air temperature < 0°C
+        D03\tGLDAS soil temperature(*) < 0°C
+        D04\tsoil moisture shows peaks without precipitation event (in situ) in the preceding 24 hours
+        D05\tsoil moisture shows peaks without precipitation event (GLDAS) in the preceding 24 hours
+
+        D - questionable/dubious - spectrum based
+        -----------------------------------------
+        D06\ta spike is detected in soil moisture spectrum
+        D07\ta negative jump is detected in soil moisture spectrum
+        D08\ta positive jump is detected in soil moisture spectrum
+        D09\tlow constant values (for a minimum time of 12 hours) occur in soil moisture spectrum
+        D10\tsaturated plateau (for a minimum time length of 12 hours) occurs in soil moisture spectrum
+
+        (*) at corresponding depth layer    
+        '''
