@@ -393,6 +393,13 @@ class Geography(Tools):
 
 
 class DataReader(Tools):
+    """_summary_
+
+    Parameters
+    ----------
+    Tools : _type_
+        _description_
+    """
 
     def __init__(self,
                  database: Any,

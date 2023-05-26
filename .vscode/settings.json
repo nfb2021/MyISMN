@@ -1,0 +1,9 @@
+{
+    "python.linting.enabled": false,
+    "python.linting.pylintPath": "pylint",
+    "editor.formatOnSave": true,
+    "python.formatting.provider": "yapf", // or "black" here
+    "python.linting.pylintEnabled": true,
+    "docify.commentService.programmingLanguage": "python",
+    "docify.commentService.docstringFormat": "Custom",
+}
