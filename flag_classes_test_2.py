@@ -3,7 +3,7 @@ from typing import Any
 
 
 class SoilMoistureFlag:
-    '''Small class around soil moisture flags contaiend in the ISMN database'''
+    '''Small class around soil moisture flags contained in the ISMN database'''
 
     def __init__(self, kind):
         self.__meaning_dict = {
