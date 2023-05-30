@@ -1,9 +1,9 @@
-from typing import Any, Optional, TypeVar, Generic
+from typing import Any, Optional, TypeVar
 import os
+import sys
+sys.path.append("/home/nbader/Documents/ISMN_data_opener_trial/")
 from ismn.interface import ISMN_Interface
 import json
-import time
-from dataclasses import dataclass, fields
 from collections import defaultdict
 from natsort import natsorted
 from tqdm import trange
@@ -20,11 +20,13 @@ class Tools:
 
     def check_database(self, database_path: str) -> bool:
         """Checks if the specified diectory containing the database exists.
-        :param database_path: A string containing the path (absolute or relative) to the database
+        :param database_path: A string containing the path (absolute or relative) \
+              to the database
         :type database_path: str
         :return: True if the database exists, False otherwise
-        :rtype: bool''
+        :rtype: bool
         """
+
 
         if os.path.isdir(database_path):
             return True
@@ -38,10 +40,9 @@ class Tools:
         :type database_path: str
         :return: An ISMN database object and the name of the database
         :rtype: tuple[ISMN_Interface, str]
-        """
+        """  # noqa: E501
 
-        __database_name: str = os.path.basename(
-            os.path.normpath(database_path))
+        __database_name: str = os.path.basename(os.path.normpath(database_path))
         __database = ISMN_Interface(__database_name, parallel=True)
 
         return __database, __database_name
@@ -50,20 +51,26 @@ class Tools:
         __root = os.getcwd()
         __path = os.path.join(__root, self.database_name)
         os.chdir(__path)
-        __networks = natsorted([
-            x for x in os.listdir(__path)
-            if os.path.isdir(x) and x not in ['python_metadata', 'json_dicts']
-        ])
+        __networks = natsorted(
+            [
+                x
+                for x in os.listdir(__path)
+                if os.path.isdir(x) and x not in ["python_metadata", "json_dicts"]
+            ]
+        )
         os.chdir(__root)
         return __networks, len(__networks)
 
     def get_all_numbers(
         self, database: MyDataTypes.IsmnDataBase
     ) -> tuple[int, int, int, dict, dict]:
-        """Counts the total number of networks, stations, and sensors in the database and creates a dictionary.
+        """Counts the total number of networks, stations, and sensors in the database \
+            and creates a dictionary.
         :param database: An ISMN database object
         :type database: MyDataTypes.IsmnDataBase
-        :return: Number of networks, number of stations, number of sensors, a dictionary containing which network contains how many stations and a dictionary containing which network and station contains how many sensors.
+        :return: Number of networks, number of stations, number of sensors, \
+            a dictionary containing which network contains how many stations and \ 
+            a dictionary containing which network and station contains how many sensors.
         :rtype: tuple[int, int, int, dict, dict]
         """
 
@@ -76,13 +83,14 @@ class Tools:
         stations_dict: dict = {}
         sensors_dict: dict = {}
 
-        for ii in trange(no_of_networks, desc='iterating over networks:'):
+        for ii in trange(no_of_networks, desc="iterating over networks:"):
             network_name = network_lst[ii]
             try:
                 network = database[network_name]
             except KeyError:
                 print(
-                    f"\n\n\t The network {network_name} was not loaded by the ISMN module\n\n"
+                    f"\n\n\t The network {network_name} was not loaded by the \
+                        ISMN module\n\n"
                 )
                 continue
 
@@ -112,31 +120,29 @@ class Tools:
         )
 
     def make_json(
-        self,
-        data: dict,
-        json_name: str,
-        where_to_be_saved: Optional[str] = os.getcwd()) -> None:
+        self, data: dict, json_name: str, where_to_be_saved: Optional[str] = os.getcwd()
+    ) -> None:
         """Creates a JSON file with the specified data.
         :param data: The data to be saved in the JSON file
         :type data: dict
         :param json_name: The name of the JSON file
         :type json_name: str
-        :param where_to_be_saved: A string containing the path (absolute or relative) to where the JSON is to be saved, by default the current working directory
+        :param where_to_be_saved: A string containing the path (absolute or relative)\
+              to where the JSON is to be saved, by default the current working directory
         :type where_to_be_saved: Optional[str]
         :return: None
         :rtype: None
         """
 
-        with open(os.path.join(where_to_be_saved, json_name),
-                  "w") as __outfile:
+        with open(os.path.join(where_to_be_saved, json_name), "w") as __outfile:
             json.dump(data, __outfile)
 
         print(
-            f'The JSON file "{json_name}" has been created in the directory "{os.path.join(where_to_be_saved)}".'
+            f'The JSON file "{json_name}" has been created in the directory \
+                "{os.path.join(where_to_be_saved)}".'
         )
 
-    def read_json(self, json_name: str,
-                  path: Optional[str] = os.getcwd()) -> Any:
+    def read_json(self, json_name: str, path: Optional[str] = os.getcwd()) -> Any:
         """Readd the specified JSON file and returns the data.
         :param json_name: The name of the JSON file
         :type json_name: str
@@ -152,7 +158,8 @@ class Tools:
         return __read_json
 
     def file_exist_status(
-        self, file_name: str, path: Optional[str] = os.getcwd()) -> bool:
+        self, file_name: str, path: Optional[str] = os.getcwd()
+    ) -> bool:
         """Checks if the specified file exists in the specified path.
         :param file_name: The name of the file
         :type file_name: str
@@ -164,7 +171,8 @@ class Tools:
         return os.path.isfile(os.path.join(path, file_name))
 
     def directory_exist_status(
-        self, dir_name: str, path: Optional[str] = os.getcwd()) -> bool:
+        self, dir_name: str, path: Optional[str] = os.getcwd()
+    ) -> bool:
         """Checks if the specified directory exists in the specified path.
         :param dir_name: The name of the directory
         :type dir_name: str
@@ -179,7 +187,8 @@ class Tools:
         """Create a multi-dimensional dictionary, based on a default dictionary.
         :param K: The number of dimensions
         :type K: int
-        :param type: The type of the item to be contained in the default dictionary, i.e. int, string, list or dict
+        :param type: The type of the item to be contained in the default dictionary, \
+            i.e. int, string, list or dict
         :type type: type
         :return: A multi-dimensional default dictionary
         :rtype: defaultdict
@@ -189,9 +198,7 @@ class Tools:
         else:
             return defaultdict(lambda: self.multi_dict(K - 1, type))
 
-    def c_prettyprint(self,
-                      dictionary: dict,
-                      indent: Optional[int] = 2) -> None:
+    def c_prettyprint(self, dictionary: dict, indent: Optional[int] = 2) -> None:
         """Prints the dictionary in a pretty format.
         :param dictionary: The dictionary to be printed
         :type dictionary: dict
@@ -208,9 +215,9 @@ class Geography(Tools):
     def __init__(self):
         super().__init__()
 
-    def get_country_from_coords(self, latitude: float,
-                                longitude: float) -> str:
-        """Get a country for input latitude and longitude. Based on https://github.com/che0/countries and https://thematicmapping.org/downloads/world_borders.php
+    def get_country_from_coords(self, latitude: float, longitude: float) -> str:
+        """Get a country for input latitude and longitude. \
+            Based on https://github.com/che0/countries and https://thematicmapping.org/downloads/world_borders.php
 
         :param latitude: The latitude of the location
         :type latitude: float
@@ -222,8 +229,8 @@ class Geography(Tools):
         from CoordPy import countries
 
         cc = countries.CountryChecker(
-            os.path.join("CoordPy", "TM_WORLD_BORDERS",
-                         "TM_WORLD_BORDERS-0.3.shp"))
+            os.path.join("CoordPy", "TM_WORLD_BORDERS", "TM_WORLD_BORDERS-0.3.shp")
+        )
 
         try:
             return cc.getCountry(countries.Point(latitude, longitude)).iso
@@ -233,10 +240,10 @@ class Geography(Tools):
 
     def sort_stations_to_countries(self) -> tuple[dict, dict]:
         if not os.path.isfile(
-                os.path.join(self.database_name, "json_dicts",
-                             "countries.json")) and not os.path.isfile(
-                                 os.path.join(self.database_name, "json_dicts",
-                                              "locations.json")):
+            os.path.join(self.database_name, "json_dicts", "countries.json")
+        ) and not os.path.isfile(
+            os.path.join(self.database_name, "json_dicts", "locations.json")
+        ):
             print("if")
             locations_dict = {}
             sorted_countries_dict = {}
@@ -248,10 +255,16 @@ class Geography(Tools):
                 counter = 0
                 _country = []
                 while counter < _no_of_sensors:
-                    lat = (self.database[_network][_station]
-                           [counter].metadata["latitude"].val)
-                    long = (self.database[_network][_station]
-                            [counter].metadata["longitude"].val)
+                    lat = (
+                        self.database[_network][_station][counter]
+                        .metadata["latitude"]
+                        .val
+                    )
+                    long = (
+                        self.database[_network][_station][counter]
+                        .metadata["longitude"]
+                        .val
+                    )
 
                     _country.append(self.get_country_from_coords(lat, long))
 
@@ -265,8 +278,10 @@ class Geography(Tools):
                     try:
                         if _country[0] not in sorted_countries_dict:
                             sorted_countries_dict[_country[0]] = [_network]
-                        if (_country[0] in sorted_countries_dict and _network
-                                not in sorted_countries_dict[_country[0]]):
+                        if (
+                            _country[0] in sorted_countries_dict
+                            and _network not in sorted_countries_dict[_country[0]]
+                        ):
                             _temp = list(sorted_countries_dict[_country[0]])
                             # print(_temp)
                             _temp.append(_network)
@@ -279,33 +294,33 @@ class Geography(Tools):
                             sorted_countries_dict["Unknown"] = [_network]
                         else:
                             sorted_countries_dict["Unknown"] = list(
-                                sorted_countries_dict["Unknown"]).append(
-                                    _network)
+                                sorted_countries_dict["Unknown"]
+                            ).append(_network)
 
             sorted_countries_dict = dict(sorted(sorted_countries_dict.items()))
             self.countries_dict = sorted_countries_dict
             self.locations_dict = locations_dict
 
             with open(
-                    os.path.join(self.database_name, "json_dicts",
-                                 "locations.json"), "w") as outfile:
+                os.path.join(self.database_name, "json_dicts", "locations.json"), "w"
+            ) as outfile:
                 json.dump(locations_dict, outfile)
 
             with open(
-                    os.path.join(self.database_name, "json_dicts",
-                                 "countries.json"), "w") as outfile:
+                os.path.join(self.database_name, "json_dicts", "countries.json"), "w"
+            ) as outfile:
                 json.dump(sorted_countries_dict, outfile)
 
         else:
             print("else")
             with open(
-                    os.path.join(self.database_name, "json_dicts",
-                                 "countries.json")) as json_file:
+                os.path.join(self.database_name, "json_dicts", "countries.json")
+            ) as json_file:
                 self.countries_dict = json.load(json_file)
 
             with open(
-                    os.path.join(self.database_name, "json_dicts",
-                                 "locations.json")) as json_file:
+                os.path.join(self.database_name, "json_dicts", "locations.json")
+            ) as json_file:
                 self.locations_dict = json.load(json_file)
 
         print("now i return")
@@ -313,10 +328,10 @@ class Geography(Tools):
 
     def sort_stations_to_countries2(self) -> tuple[dict, dict]:
         if not os.path.isfile(
-                os.path.join(self.database_name, "json_dicts",
-                             "countries.json")) and not os.path.isfile(
-                                 os.path.join(self.database_name, "json_dicts",
-                                              "locations.json")):
+            os.path.join(self.database_name, "json_dicts", "countries.json")
+        ) and not os.path.isfile(
+            os.path.join(self.database_name, "json_dicts", "locations.json")
+        ):
             print("if")
             locations_dict = {}
             sorted_countries_dict = {}
@@ -328,10 +343,16 @@ class Geography(Tools):
                 counter = 0
                 _country = []
                 while counter < _no_of_sensors:
-                    lat = (self.database[_network][_station]
-                           [counter].metadata["latitude"].val)
-                    long = (self.database[_network][_station]
-                            [counter].metadata["longitude"].val)
+                    lat = (
+                        self.database[_network][_station][counter]
+                        .metadata["latitude"]
+                        .val
+                    )
+                    long = (
+                        self.database[_network][_station][counter]
+                        .metadata["longitude"]
+                        .val
+                    )
 
                     _country.append(self.get_country_from_coords(lat, long))
 
@@ -345,8 +366,10 @@ class Geography(Tools):
                     try:
                         if _country[0] not in sorted_countries_dict:
                             sorted_countries_dict[_country[0]] = [_network]
-                        if (_country[0] in sorted_countries_dict and _network
-                                not in sorted_countries_dict[_country[0]]):
+                        if (
+                            _country[0] in sorted_countries_dict
+                            and _network not in sorted_countries_dict[_country[0]]
+                        ):
                             _temp = list(sorted_countries_dict[_country[0]])
                             # print(_temp)
                             _temp.append(_network)
@@ -359,33 +382,33 @@ class Geography(Tools):
                             sorted_countries_dict["Unknown"] = [_network]
                         else:
                             sorted_countries_dict["Unknown"] = list(
-                                sorted_countries_dict["Unknown"]).append(
-                                    _network)
+                                sorted_countries_dict["Unknown"]
+                            ).append(_network)
 
             sorted_countries_dict = dict(sorted(sorted_countries_dict.items()))
             self.countries_dict = sorted_countries_dict
             self.locations_dict = locations_dict
 
             with open(
-                    os.path.join(self.database_name, "json_dicts",
-                                 "locations.json"), "w") as outfile:
+                os.path.join(self.database_name, "json_dicts", "locations.json"), "w"
+            ) as outfile:
                 json.dump(locations_dict, outfile)
 
             with open(
-                    os.path.join(self.database_name, "json_dicts",
-                                 "countries.json"), "w") as outfile:
+                os.path.join(self.database_name, "json_dicts", "countries.json"), "w"
+            ) as outfile:
                 json.dump(sorted_countries_dict, outfile)
 
         else:
             print("else")
             with open(
-                    os.path.join(self.database_name, "json_dicts",
-                                 "countries.json")) as json_file:
+                os.path.join(self.database_name, "json_dicts", "countries.json")
+            ) as json_file:
                 self.countries_dict = json.load(json_file)
 
             with open(
-                    os.path.join(self.database_name, "json_dicts",
-                                 "locations.json")) as json_file:
+                os.path.join(self.database_name, "json_dicts", "locations.json")
+            ) as json_file:
                 self.locations_dict = json.load(json_file)
 
         print("now i return")
@@ -393,36 +416,29 @@ class Geography(Tools):
 
 
 class DataReader(Tools):
-    """_summary_
 
-    Parameters
-    ----------
-    Tools : _type_
-        _description_
-    """
-
-    def __init__(self,
-                 database: Any,
-                 process_parallel: Optional[bool] = True) -> None:
+    def __init__(self, database: Any, process_parallel: Optional[bool] = True) -> None:
         super().__init__()
 
         if self.check_database(database):
             self.database, self.database_name = self.get_database(database)
         else:
             raise ValueError(
-                f'The specified database "{database}" does not exist in the current working directory: "{os.getcwd()}".'
+                f'The specified database "{database}" does not exist \
+                    in the current working directory: "{os.getcwd()}".'
             )
 
         if not self.directory_exist_status(
-                "json_dicts", os.path.join(os.getcwd(), self.database_name)):
-            os.mkdir(
-                os.path.join(os.getcwd(), self.database_name, "json_dicts"))
+            "json_dicts", os.path.join(os.getcwd(), self.database_name)
+        ):
+            os.mkdir(os.path.join(os.getcwd(), self.database_name, "json_dicts"))
 
-        if self.file_exist_status("numbers.json",
-                                  os.path.join(os.getcwd(), "json_dicts")):
-            self.numbers_dict = self.read_json("numbers.json",
-                                               path=os.path.join(
-                                                   os.getcwd(), "json_dicts"))
+        if self.file_exist_status(
+            "numbers.json", os.path.join(os.getcwd(), "json_dicts")
+        ):
+            self.numbers_dict = self.read_json(
+                "numbers.json", path=os.path.join(os.getcwd(), "json_dicts")
+            )
             self.no_of_networks, self.no_of_stations, self.no_of_sensors = (
                 self.numbers_dict["Networks"],
                 self.numbers_dict["Stations"],
@@ -446,11 +462,12 @@ class DataReader(Tools):
                 os.path.join(self.database_name, "json_dicts"),
             )
 
-        if self.file_exist_status("stations.json",
-                                  os.path.join(os.getcwd(), "json_dicts")):
-            self.stations_dict = self.read_json("stations.json",
-                                                path=os.path.join(
-                                                    os.getcwd(), "json_dicts"))
+        if self.file_exist_status(
+            "stations.json", os.path.join(os.getcwd(), "json_dicts")
+        ):
+            self.stations_dict = self.read_json(
+                "stations.json", path=os.path.join(os.getcwd(), "json_dicts")
+            )
         elif not self._func_get_all_numbers_ran:
             self.make_json(
                 self.stations_dict,
@@ -471,11 +488,12 @@ class DataReader(Tools):
                 os.path.join(self.database_name, "json_dicts"),
             )
 
-        if self.file_exist_status("sensors.json",
-                                  os.path.join(os.getcwd(), "json_dicts")):
-            self.stations_dict = self.read_json("sensors.json",
-                                                path=os.path.join(
-                                                    os.getcwd(), "json_dicts"))
+        if self.file_exist_status(
+            "sensors.json", os.path.join(os.getcwd(), "json_dicts")
+        ):
+            self.stations_dict = self.read_json(
+                "sensors.json", path=os.path.join(os.getcwd(), "json_dicts")
+            )
         elif not self._func_get_all_numbers_ran:
             self.make_json(
                 self.stations_dict,
@@ -497,48 +515,126 @@ class DataReader(Tools):
             )
 
 
-class Flags:
-    '''Defines flags used by the ISMN data quality control'''
+class Flags(DataReader):
+    """Defines flags used by the ISMN data quality control"""
+    def __init__(self, database: Any, process_parallel: Optional[bool] = True) -> None:
+        self.available_soil_moisture_flags = \
+                [
+                'C01', 'C02', 'C03', 
+                'D01', 'D02', 'D03', 'D04', 'D05', 
+                'D06', 'D07', 'D08', 'D09', 'D10', 
+                'G'
+                ]
+
+        super().__init__(database, process_parallel)
+
+    def make_flag_dict(self):  
+        if  self.file_exist_status(
+            os.path.join(self.database_name, 'json_dicts', 'flag_dict.json')
+            ):
+            print('flag_dict.json exists')
+            with open(os.path.join(self.database_name, 'json_dicts', \
+                                   'flag_dict.json')) as json_file:
+                self.flag_dict = json.load(json_file)  
+
+        else:
+            print('flag_dict.json does not exist')
+            self.flag_dict = self.multi_dict(4, dict)
+            for network, station, sensor in self.database.collection.iter_sensors():
+                # print(network.name, station.name, sensor.name)
+
+                sensor_flag_dict_entangled = sensor.data['soil_moisture_flag']\
+                    .value_counts(ascending = False).to_dict()
+                sensor_flag_dict_disentangled = defaultdict(int)
+
+
+                for key, item in sensor_flag_dict_entangled.items():
+                    # with open('all_flags.txt', 'a') as f:
+                    #     f.write(f'{key}\n')
+                    if ',' not in key and ' ' not in key:
+                        sensor_flag_dict_disentangled[key] += int(item)
+
+                    elif ',' in key and ' ' not in key:
+                        for splitter in key.split(','):
+                            if splitter.strip() in self.available_soil_moisture_flags:
+                                sensor_flag_dict_disentangled[splitter.strip()] \
+                                    += int(item)
+
+
+                            # if splitter[0] in ["G", "C", "D"]:
+                            #     # print(f"{network.name}, {station.name}, \
+                            #     # {sensor.name}, {key}")
+                            #     sensor_flag_dict_disentangled[key] += int(item)
+
+                            else:
+                                with open('all_flags.txt', 'a') as f:
+                                    f.write(f'{key}\t\t"elif COMMA in key and SPACE not in key, else:"\t{network.name}, {station.name}, {sensor.name}\n')
+
+                    elif ' ' in key and ',' not in key:
+                        for splitter in key.split(' '):
+                            if splitter in self.available_soil_moisture_flags:
+                                sensor_flag_dict_disentangled[splitter] += int(item)
+
+                            else:
+                                with open('all_flags.txt', 'a') as f:
+                                    f.write(f'{key}\t\t"elif SPACE in key and COMMA not in key"\t{network.name}, {station.name}, {sensor.name}\n')
+
+
+                    else:
+                        with open('all_flags.txt', 'a') as f:
+                            f.write(f'{key}\t\telse\t{network.name}, {station.name}, {sensor.name}\n')
+
+                sensor_flag_dict_disentangled = \
+                        dict(sorted( \
+                        sensor_flag_dict_disentangled.items(), \
+                        key=lambda item: item[1], \
+                        reverse = True\
+                        ))
+                
+                self.flag_dict[network.name][station.name][sensor.name] \
+                    = sensor_flag_dict_disentangled
+                
+            self.make_json(self.flag_dict, 'flag_dict.json', \
+                           os.path.join(self.database_name, \
+                                        'json_dicts'))
 
 
 class GroupDynamicVariable(Flags):
-
     def __init__(self):
         super().__init__()
 
     def __str__(self):
-        return 'dynamic variables'
+        return "dynamic variables"
 
 
 class GroupC(Flags):
-
     def __init__(self):
         super().__init__()
 
     def __str__(self):
-        return 'reported value exceeds output format field size'
+        return "reported value exceeds output format field size"
 
 
 class GroupD(Flags):
-    category = 'D'
+    category = "D"
 
     def __init__(self):
         super().__init__()
         # self.category = 'D'
 
     def __str__(self):
-        return 'questionable/dubious'
+        return "questionable/dubious"
 
 
 class GeophyscialBased(GroupD):
-    sub_category = 'geophysical based'
+    sub_category = "geophysical based"
 
     def __init__(self):
         super().__init__()
         # self.sub_category = 'geophysical based'
 
     def __str__(self):
-        return 'geophysical based'
+        return "geophysical based"
 
 
 class SpectrumBased(GroupD):
@@ -546,149 +642,139 @@ class SpectrumBased(GroupD):
     #     super().__init__()
 
     def __str__(self):
-        return 'spectrum based'
+        return "spectrum based"
 
 
 class G(GroupDynamicVariable):
-
     def __init__(self):
         super().__init__()
 
     def __str__(self):
-        return 'Good'
+        return "Good"
 
 
 class M(GroupDynamicVariable):
-
     def __init__(self):
         super().__init__()
 
     def __str__(self):
-        return 'Parameter value missing'
+        return "Parameter value missing"
 
 
 class C01(GroupC):
-
     def __init__(self):
         super().__init__()
 
     def __str__(self):
-        return 'soil moisture < 0.0 m^3/m^3'
+        return "soil moisture < 0.0 m^3/m^3"
 
 
 class C02(GroupC):
-
     def __init__(self):
         super().__init__()
 
     def __str__(self):
-        return 'soil moisture > 0.6 m^3/m^3'
+        return "soil moisture > 0.6 m^3/m^3"
 
 
 class C03(GroupC):
-
     def __init__(self):
         super().__init__()
 
     def __str__(self):
-        return 'soil moisture > saturation point (derived from HWSD parameter values)'
+        return "soil moisture > saturation point (derived from HWSD parameter values)"
 
 
 class D01(GeophyscialBased):
-
     def __init__(self):
         super().__init__()
 
     def __str__(self):
-        return 'in situ soil temperature (at corresponding depth layer) < 0°C'
+        return "in situ soil temperature (at corresponding depth layer) < 0°C"
 
 
 class D02(GeophyscialBased):
-
     def __init__(self):
         super().__init__()
 
     def __str__(self):
-        return 'in situ air temperature < 0°C'
+        return "in situ air temperature < 0°C"
 
 
 class D03(GeophyscialBased):
-
     def __init__(self):
         super().__init__()
 
     def __str__(self):
-        return 'GLDAS soil temperatureat corresponding depth layer) < 0°C'
+        return "GLDAS soil temperatureat corresponding depth layer) < 0°C"
 
 
 class D04(GeophyscialBased):
-
     def __init__(self):
         super().__init__()
 
     def __str__(self):
-        return 'soil moisture shows peaks without precipitation event (in situ) in the preceding 24 hours'
+        return "soil moisture shows peaks without precipitation event (in situ) \
+            in the preceding 24 hours"
 
 
 class D05(GeophyscialBased):
-    kind = 'D05'
+    kind = "D05"
 
     def __init__(self):
         super().__init__()
 
     def __str__(self):
-        return 'soil moisture shows peaks without precipitation event (GLDAS) in the preceding 24 hours'
+        return "soil moisture shows peaks without precipitation event (GLDAS) \
+            in the preceding 24 hours"
 
 
 class D06(SpectrumBased):
-
     def __init__(self):
         super().__init__()
 
     def __str__(self):
-        return 'a spike is detected in soil moisture spectrum'
+        return "a spike is detected in soil moisture spectrum"
 
 
 class D07(SpectrumBased):
-
     def __init__(self):
         super().__init__()
 
     def __str__(self):
-        return 'a negative jump is detected in soil moisture spectrum'
+        return "a negative jump is detected in soil moisture spectrum"
 
 
 class D08(SpectrumBased):
-
     def __init__(self):
         super().__init__()
 
     def __str__(self):
-        return 'a positive jump is detected in soil moisture spectrum'
+        return "a positive jump is detected in soil moisture spectrum"
 
 
 class D09(SpectrumBased):
-
     def __init__(self):
         super().__init__()
 
     def __str__(self):
-        return 'low constant values (for a minimum time of 12 hours) occur in soil moisture spectrum'
+        return "low constant values (for a minimum time of 12 hours) occur in \
+            soil moisture spectrum"
 
 
 class D10(SpectrumBased):
-
     def __init__(self):
         super().__init__()
 
     def __str__(self):
-        return 'saturated plateau (for a minimum time length of 12 hours) occurs in soil moisture spectrum'
+        return "saturated plateau (for a minimum time length of 12 hours) occurs in \
+            soil moisture spectrum"
 
 
 class FunWithFlags(Flags, DataReader):
-    '''Small class centered around flags of the ISMN databse.
+    """Small class centered around flags of the ISMN databse.
     Concerning soil moisture, following flags exist:
-    
+
     Dynamic variables
     -----------------
     G:   Good
@@ -699,25 +785,29 @@ class FunWithFlags(Flags, DataReader):
     C01: soil moisture < 0.0 m^3/m^3
     C02: soil moisture > 0.6 m^3/m^3
     C03: soil moisture > saturation point (derived from HWSD parameter values)
-    
+
     D - questionable/dubious - geophysical based
     --------------------------------------------
     D01: in situ soil temperature(*) < 0°C
     D02: in situ air temperature < 0°C
     D03: GLDAS soil temperature(*) < 0°C
-    D04: soil moisture shows peaks without precipitation event (in situ) in the preceding 24 hours
-    D05: soil moisture shows peaks without precipitation event (GLDAS) in the preceding 24 hours
+    D04: soil moisture shows peaks without precipitation event (in situ) \
+        in the preceding 24 hours
+    D05: soil moisture shows peaks without precipitation event (GLDAS) \
+        in the preceding 24 hours
 
     D - questionable/dubious - spectrum based
     -----------------------------------------
     D06: a spike is detected in soil moisture spectrum
     D07: a negative jump is detected in soil moisture spectrum
     D08: a positive jump is detected in soil moisture spectrum
-    D09: low constant values (for a minimum time of 12 hours) occur in soil moisture spectrum
-    D10: saturated plateau (for a minimum time length of 12 hours) occurs in soil moisture spectrum
+    D09: low constant values (for a minimum time of 12 hours) occur in \
+        soil moisture spectrum
+    D10: saturated plateau (for a minimum time length of 12 hours) occurs \
+        in soil moisture spectrum
 
-    (*) at corresponding depth layer    
-    '''
+    (*) at corresponding depth layer
+    """
 
     def __init__(self):
         super().__init__()
@@ -742,16 +832,20 @@ class FunWithFlags(Flags, DataReader):
     #     D01\tin situ soil temperature(*) < 0°C
     #     D02\tin situ air temperature < 0°C
     #     D03\tGLDAS soil temperature(*) < 0°C
-    #     D04\tsoil moisture shows peaks without precipitation event (in situ) in the preceding 24 hours
-    #     D05\tsoil moisture shows peaks without precipitation event (GLDAS) in the preceding 24 hours
+    #     D04\tsoil moisture shows peaks without precipitation event (in situ) \
+    # in the preceding 24 hours
+    #     D05\tsoil moisture shows peaks without precipitation event (GLDAS) \
+    # in the preceding 24 hours
 
     #     D - questionable/dubious - spectrum based
     #     -----------------------------------------
     #     D06\ta spike is detected in soil moisture spectrum
     #     D07\ta negative jump is detected in soil moisture spectrum
     #     D08\ta positive jump is detected in soil moisture spectrum
-    #     D09\tlow constant values (for a minimum time of 12 hours) occur in soil moisture spectrum
-    #     D10\tsaturated plateau (for a minimum time length of 12 hours) occurs in soil moisture spectrum
+    #     D09\tlow constant values (for a minimum time of 12 hours) occur \
+    # in soil moisture spectrum
+    #     D10\tsaturated plateau (for a minimum time length of 12 hours) occurs \
+    # in soil moisture spectrum
 
     #     (*) at corresponding depth layer
     #     ')
