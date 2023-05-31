@@ -7,6 +7,7 @@ import json
 from collections import defaultdict
 from natsort import natsorted
 from tqdm import trange
+import datetime
 
 
 class MyDataTypes:
@@ -135,7 +136,7 @@ class Tools:
         """
 
         with open(os.path.join(where_to_be_saved, json_name), "w") as __outfile:
-            json.dump(data, __outfile)
+            json.dump(data, __outfile, indent=2)
 
         print(
             f'The JSON file "{json_name}" has been created in the directory \
@@ -520,15 +521,27 @@ class Flags(DataReader):
     def __init__(self, database: Any, process_parallel: Optional[bool] = True) -> None:
         self.available_soil_moisture_flags = \
                 [
-                'C01', 'C02', 'C03', 
-                'D01', 'D02', 'D03', 'D04', 'D05', 
-                'D06', 'D07', 'D08', 'D09', 'D10', 
-                'G'
+                    'C01', 'C02', 'C03', 
+                    'D01', 'D02', 'D03', 'D04', 'D05', 
+                    'D06', 'D07', 'D08', 'D09', 'D10', 
+                    'G'
+                ]
+        self.faulty_soil_moisture_flags = \
+                [
+                    'M',
+                    'OK'
                 ]
 
         super().__init__(database, process_parallel)
 
     def make_flag_dict(self):  
+        faulty_flag_file = os.path.join(self.database_name, 'faulty_flags.txt')
+        if os.path.isfile(faulty_flag_file):
+            os.remove(faulty_flag_file)
+            with open(faulty_flag_file, 'w') as fff:
+                fff.write('flag_string\tfaulty_part\tnetwork\tstation\tsensor\n')
+    
+
         if  self.file_exist_status(
             os.path.join(self.database_name, 'json_dicts', 'flag_dict.json')
             ):
@@ -549,9 +562,7 @@ class Flags(DataReader):
 
 
                 for key, item in sensor_flag_dict_entangled.items():
-                    # with open('all_flags.txt', 'a') as f:
-                    #     f.write(f'{key}\n')
-                    if ',' not in key and ' ' not in key:
+                    if ',' not in key and ' ' not in key and key in self.available_soil_moisture_flags:
                         sensor_flag_dict_disentangled[key] += int(item)
 
                     elif ',' in key and ' ' not in key:
@@ -560,29 +571,23 @@ class Flags(DataReader):
                                 sensor_flag_dict_disentangled[splitter.strip()] \
                                     += int(item)
 
-
-                            # if splitter[0] in ["G", "C", "D"]:
-                            #     # print(f"{network.name}, {station.name}, \
-                            #     # {sensor.name}, {key}")
-                            #     sensor_flag_dict_disentangled[key] += int(item)
-
-                            else:
-                                with open('all_flags.txt', 'a') as f:
-                                    f.write(f'{key}\t\t"elif COMMA in key and SPACE not in key, else:"\t{network.name}, {station.name}, {sensor.name}\n')
+                            elif splitter.strip() not in self.faulty_soil_moisture_flags:
+                                with open(faulty_flag_file, 'a') as fff:
+                                    fff.write(f'{key}\t{splitter}\t{network.name}\t{station.name}\t{sensor.name}\n')
 
                     elif ' ' in key and ',' not in key:
                         for splitter in key.split(' '):
                             if splitter in self.available_soil_moisture_flags:
                                 sensor_flag_dict_disentangled[splitter] += int(item)
 
-                            else:
-                                with open('all_flags.txt', 'a') as f:
-                                    f.write(f'{key}\t\t"elif SPACE in key and COMMA not in key"\t{network.name}, {station.name}, {sensor.name}\n')
+                            elif splitter not in self.faulty_soil_moisture_flags:
+                                with open(faulty_flag_file, 'a') as fff:
+                                    fff.write(f'{key}\t{splitter}\t{network.name}\t{station.name}\t{sensor.name}\n')
 
 
                     else:
-                        with open('all_flags.txt', 'a') as f:
-                            f.write(f'{key}\t\telse\t{network.name}, {station.name}, {sensor.name}\n')
+                        with open(faulty_flag_file, 'a') as fff:
+                            fff.write(f'{key}\t{key}\t{network.name}\t{station.name}\t{sensor.name}\n')
 
                 sensor_flag_dict_disentangled = \
                         dict(sorted( \
@@ -594,9 +599,13 @@ class Flags(DataReader):
                 self.flag_dict[network.name][station.name][sensor.name] \
                     = sensor_flag_dict_disentangled
                 
-            self.make_json(self.flag_dict, 'flag_dict.json', \
+            self.make_json(dict(self.flag_dict), 'flag_dict.json', \
                            os.path.join(self.database_name, \
                                         'json_dicts'))
+            
+
+        if not os.path.isfile(faulty_flag_file):
+            print('\n\n\There were no faulty flags identified in the database\n\n')
 
 
 class GroupDynamicVariable(Flags):
