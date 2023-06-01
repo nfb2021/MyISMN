@@ -8,6 +8,36 @@ from collections import defaultdict
 from natsort import natsorted
 from tqdm import trange
 import datetime
+from functools import wraps
+import time 
+import polars as pl
+from multiprocessing import Pool
+from glob import iglob
+import numpy as np
+import pandas as pd
+
+
+def flag_reader(sensor_path):
+    return pl.read_csv(
+                source = sensor_path,
+                has_header = True,
+                columns = [3],
+                separator=' ',
+                dtypes = [pl.Utf8],
+                try_parse_dates=True,
+                use_pyarrow = True
+                )
+
+def timeit(func):
+    @wraps(func)
+    def timeit_wrapper(*args, **kwargs):
+        start_time = time.perf_counter()
+        result = func(*args, **kwargs)
+        end_time = time.perf_counter()
+        total_time = end_time - start_time
+        print(f'\n\n\tFunction {func.__name__}{args} {kwargs} Took {total_time:.4f} seconds\n\n')
+        return result
+    return timeit_wrapper
 
 
 class MyDataTypes:
@@ -18,6 +48,8 @@ class MyDataTypes:
 
 class Tools:
     """Small collection of tools around the ISMN database"""
+    def __init__(self) -> None:
+        self.root = os.getcwd()
 
     def check_database(self, database_path: str) -> bool:
         """Checks if the specified diectory containing the database exists.
@@ -61,6 +93,22 @@ class Tools:
         )
         os.chdir(__root)
         return __networks, len(__networks)
+    
+    def get_all_sensors(self) -> list:
+        return natsorted([os.path.normpath(os.path.join(self.root, f)) for f in iglob(os.path.join(self.database_name, '**', '*'), recursive=True) if os.path.isfile(f) and f.endswith('.stm')])
+
+    def get_network_from_filename(self, filename: str) -> str:
+        return filename.split('/')[-1].split('_')[0]
+    
+    def get_station_from_filename(self, filename: str) -> str:
+        return filename.split('/')[-1].split('_')[2]
+    
+    def get_sensor_from_filename(self, filename: str) -> str:
+        splitter = filename.split('/')[-1].split('_')
+        if splitter[-6] == 'sm':
+            return f'{splitter[-3]}_soil_moisture_{splitter[-5]}_{splitter[-4]}'
+        else:
+            print('This is not an exclusive soil moisture data set')
 
     def get_all_numbers(
         self, database: MyDataTypes.IsmnDataBase
@@ -158,7 +206,7 @@ class Tools:
 
         return __read_json
 
-    def file_exist_status(
+    def file_exists(
         self, file_name: str, path: Optional[str] = os.getcwd()
     ) -> bool:
         """Checks if the specified file exists in the specified path.
@@ -434,7 +482,7 @@ class DataReader(Tools):
         ):
             os.mkdir(os.path.join(os.getcwd(), self.database_name, "json_dicts"))
 
-        if self.file_exist_status(
+        if self.file_exists(
             "numbers.json", os.path.join(os.getcwd(), "json_dicts")
         ):
             self.numbers_dict = self.read_json(
@@ -463,7 +511,7 @@ class DataReader(Tools):
                 os.path.join(self.database_name, "json_dicts"),
             )
 
-        if self.file_exist_status(
+        if self.file_exists(
             "stations.json", os.path.join(os.getcwd(), "json_dicts")
         ):
             self.stations_dict = self.read_json(
@@ -489,7 +537,7 @@ class DataReader(Tools):
                 os.path.join(self.database_name, "json_dicts"),
             )
 
-        if self.file_exist_status(
+        if self.file_exists(
             "sensors.json", os.path.join(os.getcwd(), "json_dicts")
         ):
             self.stations_dict = self.read_json(
@@ -534,6 +582,8 @@ class Flags(DataReader):
 
         super().__init__(database, process_parallel)
 
+    
+    @timeit
     def make_flag_dict(self):  
         faulty_flag_file = os.path.join(self.database_name, 'faulty_flags.txt')
         if os.path.isfile(faulty_flag_file):
@@ -542,7 +592,7 @@ class Flags(DataReader):
                 fff.write('flag_string\tfaulty_part\tnetwork\tstation\tsensor\n')
     
 
-        if  self.file_exist_status(
+        if  self.file_exists(
             os.path.join(self.database_name, 'json_dicts', 'flag_dict.json')
             ):
             print('flag_dict.json exists')
@@ -607,6 +657,53 @@ class Flags(DataReader):
         if not os.path.isfile(faulty_flag_file):
             print('\n\n\There were no faulty flags identified in the database\n\n')
 
+
+    @timeit
+    def make_flag_dict_mod(self, n_cores: Optional[int] = 8):  
+        if  self.file_exists(
+            os.path.join(self.root, self.database_name, 'json_dicts', 'flag_df.pkl')
+            ):
+            print('flag_df.pkl exists')
+            self.flag_df = pd.read_pickle(os.path.join(self.root, self.database_name, 'json_dicts', 'flag_df.pkl'))
+
+        else:
+            print(os.getcwd())
+            print('\nConstructing and subsequently pickling the dataframe. This might take some time')
+            def multi_reader() -> dict:
+                pool = Pool(n_cores) # number of cores you want to use
+                
+                sensor_list = self.get_all_sensors() 
+                all_flags_list = [flags.to_series(0).to_list() for flags in pool.map(flag_reader, sensor_list)]      #creates a list of the loaded df's  
+                all_flags_dict = {'Soil_Moisture_Flags': self.available_soil_moisture_flags}
+
+                for flags, filename in zip(all_flags_list, sensor_list):
+                    _temp_dict = {key: 0 for key in self.available_soil_moisture_flags}
+                    for flag in flags:
+                        if ',' in flag:
+                            split_flag = flag.split(',')
+                            for splitter in split_flag:
+                                _temp_dict[splitter] += 1
+                        else:
+                            _temp_dict[flag] += 1
+
+
+                    filename = filename.split(self.root)[1][1:]
+                    all_flags_dict[filename] = list(_temp_dict.values())
+
+
+                flags_df = pd.DataFrame(all_flags_dict)
+                flags_df = flags_df.set_index('Soil_Moisture_Flags')
+
+                return flags_df
+
+
+            self.flag_df = multi_reader()
+            self.flag_df.to_pickle(os.path.join(self.database_name, 'json_dicts', 'flag_df.pkl'))
+
+
+
+
+        return self.flag_df
 
 class GroupDynamicVariable(Flags):
     def __init__(self):
