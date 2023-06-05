@@ -659,7 +659,7 @@ class Flags(DataReader):
 
 
     @timeit
-    def make_flag_dict_mod(self, n_cores: Optional[int] = 8):  
+    def get_flag_df(self, n_cores: Optional[int] = 8, save_as_csv: Optional[False] = False) -> pd.DataFrame:  
         if  self.file_exists(
             os.path.join(self.root, self.database_name, 'json_dicts', 'flag_df.pkl')
             ):
@@ -700,6 +700,9 @@ class Flags(DataReader):
             self.flag_df = multi_reader()
             self.flag_df.to_pickle(os.path.join(self.database_name, 'json_dicts', 'flag_df.pkl'))
 
+        # test
+        if save_as_csv:
+            self.flag_df.to_csv(os.path.join(self.database_name, 'json_dicts', 'flag_df.csv'))
 
 
 
