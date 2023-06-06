@@ -1,32 +1,34 @@
 from typing import Any, Optional, TypeVar
 import os
 import sys
+
 sys.path.append("/home/nbader/Documents/ISMN_data_opener_trial/")
-from ismn.interface import ISMN_Interface
-import json
-from collections import defaultdict
-from natsort import natsorted
-from tqdm import trange
-import datetime
-from functools import wraps
-import time 
-import polars as pl
-from multiprocessing import Pool
-from glob import iglob
-import numpy as np
-import pandas as pd
+from ismn.interface import ISMN_Interface  # noqa: E402
+import json  # noqa: E402
+from collections import defaultdict  # noqa: E402
+from natsort import natsorted  # noqa: E402
+from tqdm import trange  # noqa: E402
+import datetime  # noqa: E402
+from functools import wraps  # noqa: E402
+import time  # noqa: E402
+import polars as pl  # noqa: E402
+from multiprocessing import Pool  # noqa: E402
+from glob import iglob  # noqa: E402
+import numpy as np  # noqa: E402
+import pandas as pd  # noqa: E402
 
 
 def flag_reader(sensor_path):
     return pl.read_csv(
-                source = sensor_path,
-                has_header = True,
-                columns = [3],
-                separator=' ',
-                dtypes = [pl.Utf8],
-                try_parse_dates=True,
-                use_pyarrow = True
-                )
+        source=sensor_path,
+        has_header=True,
+        columns=[3],
+        separator=" ",
+        dtypes=[pl.Utf8],
+        try_parse_dates=True,
+        use_pyarrow=True,
+    )
+
 
 def timeit(func):
     @wraps(func)
@@ -35,8 +37,11 @@ def timeit(func):
         result = func(*args, **kwargs)
         end_time = time.perf_counter()
         total_time = end_time - start_time
-        print(f'\n\n\tFunction {func.__name__}{args} {kwargs} Took {total_time:.4f} seconds\n\n')
+        print(
+            f"\n\n\tFunction {func.__name__}{args} {kwargs} Took {total_time:.4f} seconds\n\n"
+        )
         return result
+
     return timeit_wrapper
 
 
@@ -48,6 +53,7 @@ class MyDataTypes:
 
 class Tools:
     """Small collection of tools around the ISMN database"""
+
     def __init__(self) -> None:
         self.root = os.getcwd()
 
@@ -59,7 +65,6 @@ class Tools:
         :return: True if the database exists, False otherwise
         :rtype: bool
         """
-
 
         if os.path.isdir(database_path):
             return True
@@ -93,22 +98,135 @@ class Tools:
         )
         os.chdir(__root)
         return __networks, len(__networks)
-    
+
     def get_all_sensors(self) -> list:
-        return natsorted([os.path.normpath(os.path.join(self.root, f)) for f in iglob(os.path.join(self.database_name, '**', '*'), recursive=True) if os.path.isfile(f) and f.endswith('.stm')])
+        return natsorted(
+            [
+                os.path.normpath(os.path.join(self.root, f))
+                for f in iglob(
+                    os.path.join(self.database_name, "**", "*"), recursive=True
+                )
+                if os.path.isfile(f) and f.endswith(".stm")
+            ]
+        )
+
+    def get_path_segments(self, path) -> list:
+        segments = []
+        pth, last = os.path.split(path)
+        segments.append(last)
+        while last:
+            pth, last = os.path.split(pth)
+            segments.append(last)
+
+        return segments[::-1]
+
+    def make_sensor_ids(self) -> tuple[dict, dict, pd.DataFrame]:
+        _sensor_ids_arr = list(np.zeros(len(self.get_all_sensors())))
+        _network_counter, _station_counter, _sensor_counter = [], [], []
+        sensor_filename_segments = [
+            "network",
+            "station",
+            "variablename",
+            "depthfrom",
+            "depthto",
+            "sensorname",
+            "startdate",
+            "enddate",
+            "path",
+        ]
+        for p, pth in enumerate(self.get_all_sensors()):
+            segments = self.get_path_segments(pth)
+            _network, _station = (
+                segments[-3],
+                segments[-2],
+            )
+
+            _sensor = segments[-1]
+            _sensor_enddate = _sensor.split("_")[-1].split(".stm")[0]
+            _sensor_startdate = _sensor.split("_")[-2]
+            _sensor_name = _sensor.split("_")[-3]
+            _sensor_dephto = _sensor.split("_")[-4]
+            _sensor_dephfrom = _sensor.split("_")[-5]
+            _sensor_variablename = _sensor.split("_")[-6]
+
+            _network_counter.append(_network)
+            _station_counter.append(f"{_network}_{_station}")
+            _sensor_counter.append(f"{_network}_{_station}_{_sensor}")
+
+            _network_counter_set, _station_counter_set, _sensor_counter_set = (
+                set(_network_counter),
+                set(_station_counter),
+                set(_sensor_counter),
+            )
+
+            _sensor_ids_arr[p] = (
+                {
+                    sensor_filename_segments[0]: _network,
+                    sensor_filename_segments[1]: _station,
+                    sensor_filename_segments[2]: _sensor_variablename,
+                    sensor_filename_segments[3]: float(_sensor_dephfrom),
+                    sensor_filename_segments[4]: float(_sensor_dephto),
+                    sensor_filename_segments[5]: _sensor_name,
+                    sensor_filename_segments[6]: datetime.datetime.strptime(
+                        _sensor_startdate, "%Y%m%d"
+                    ).strftime("%Y/%m/%d"),
+                    sensor_filename_segments[7]: datetime.datetime.strptime(
+                        _sensor_enddate, "%Y%m%d"
+                    ).strftime("%Y/%m/%d"),
+                    sensor_filename_segments[8]: os.path.join(
+                        *self.get_path_segments(pth)[-4:]
+                    ),
+                },
+                f"n{str(len(_network_counter_set)).zfill(3)}s{str(len(_station_counter_set)).zfill(4)}d{str(len(_sensor_counter_set)).zfill(5)}",
+            )
+
+        self.sensor_id_to_path_dict = {
+            sensor_id: item["path"] for item, sensor_id in _sensor_ids_arr
+        }
+
+        self.make_json(
+            self.sensor_id_to_path_dict,
+            "sensor_id_to_path_dict.json",
+            os.path.join(self.database_name, "json_dicts"),
+        )
+
+        self.sensor_path_to_id_dict = {
+            item["path"]: sensor_id for item, sensor_id in _sensor_ids_arr
+        }
+
+        self.make_json(
+            self.sensor_path_to_id_dict,
+            "sensor_path_to_id_dict.json",
+            os.path.join(self.database_name, "json_dicts"),
+        )
+
+        _temp = {sensor_id: [*item.values()] for item, sensor_id in _sensor_ids_arr}
+
+        self.sensor_df = pd.DataFrame.from_dict(data=_temp, orient="index")
+        self.sensor_df.columns = sensor_filename_segments
+
+        self.sensor_df.to_pickle(
+            os.path.join(self.database_name, "json_dicts", "sensor_df.pkl")
+        )
+
+        self.sensor_df.to_csv(
+            os.path.join(self.database_name, "json_dicts", "sensor_df.csv")
+        )
+
+        return self.sensor_path_to_id_dict, self.sensor_id_to_path_dict, self.sensor_df
 
     def get_network_from_filename(self, filename: str) -> str:
-        return filename.split('/')[-1].split('_')[0]
-    
+        return filename.split("/")[-1].split("_")[0]
+
     def get_station_from_filename(self, filename: str) -> str:
-        return filename.split('/')[-1].split('_')[2]
-    
+        return filename.split("/")[-1].split("_")[2]
+
     def get_sensor_from_filename(self, filename: str) -> str:
-        splitter = filename.split('/')[-1].split('_')
-        if splitter[-6] == 'sm':
-            return f'{splitter[-3]}_soil_moisture_{splitter[-5]}_{splitter[-4]}'
+        splitter = filename.split("/")[-1].split("_")
+        if splitter[-6] == "sm":
+            return f"{splitter[-3]}_soil_moisture_{splitter[-5]}_{splitter[-4]}"
         else:
-            print('This is not an exclusive soil moisture data set')
+            print("This is not an exclusive soil moisture data set")
 
     def get_all_numbers(
         self, database: MyDataTypes.IsmnDataBase
@@ -160,12 +278,18 @@ class Tools:
 
         self._func_get_all_numbers_ran = True
 
+        self.no_of_networks = no_of_networks
+        self.no_of_stations = no_of_stations
+        self.no_of_sensors = no_of_sensors
+        self.stations_dict = stations_dict
+        self.sensors_dict = sensors_dict
+
         return (
-            no_of_networks,
-            no_of_stations,
-            no_of_sensors,
-            stations_dict,
-            sensors_dict,
+            self.no_of_networks,
+            self.no_of_stations,
+            self.no_of_sensors,
+            self.stations_dict,
+            self.sensors_dict,
         )
 
     def make_json(
@@ -206,9 +330,7 @@ class Tools:
 
         return __read_json
 
-    def file_exists(
-        self, file_name: str, path: Optional[str] = os.getcwd()
-    ) -> bool:
+    def file_exists(self, file_name: str, path: Optional[str] = os.getcwd()) -> bool:
         """Checks if the specified file exists in the specified path.
         :param file_name: The name of the file
         :type file_name: str
@@ -465,7 +587,6 @@ class Geography(Tools):
 
 
 class DataReader(Tools):
-
     def __init__(self, database: Any, process_parallel: Optional[bool] = True) -> None:
         super().__init__()
 
@@ -482,9 +603,7 @@ class DataReader(Tools):
         ):
             os.mkdir(os.path.join(os.getcwd(), self.database_name, "json_dicts"))
 
-        if self.file_exists(
-            "numbers.json", os.path.join(os.getcwd(), "json_dicts")
-        ):
+        if self.file_exists("numbers.json", os.path.join(os.getcwd(), "json_dicts")):
             self.numbers_dict = self.read_json(
                 "numbers.json", path=os.path.join(os.getcwd(), "json_dicts")
             )
@@ -511,9 +630,7 @@ class DataReader(Tools):
                 os.path.join(self.database_name, "json_dicts"),
             )
 
-        if self.file_exists(
-            "stations.json", os.path.join(os.getcwd(), "json_dicts")
-        ):
+        if self.file_exists("stations.json", os.path.join(os.getcwd(), "json_dicts")):
             self.stations_dict = self.read_json(
                 "stations.json", path=os.path.join(os.getcwd(), "json_dicts")
             )
@@ -537,9 +654,7 @@ class DataReader(Tools):
                 os.path.join(self.database_name, "json_dicts"),
             )
 
-        if self.file_exists(
-            "sensors.json", os.path.join(os.getcwd(), "json_dicts")
-        ):
+        if self.file_exists("sensors.json", os.path.join(os.getcwd(), "json_dicts")):
             self.stations_dict = self.read_json(
                 "sensors.json", path=os.path.join(os.getcwd(), "json_dicts")
             )
@@ -566,147 +681,185 @@ class DataReader(Tools):
 
 class Flags(DataReader):
     """Defines flags used by the ISMN data quality control"""
+
     def __init__(self, database: Any, process_parallel: Optional[bool] = True) -> None:
-        self.available_soil_moisture_flags = \
-                [
-                    'C01', 'C02', 'C03', 
-                    'D01', 'D02', 'D03', 'D04', 'D05', 
-                    'D06', 'D07', 'D08', 'D09', 'D10', 
-                    'G'
-                ]
-        self.faulty_soil_moisture_flags = \
-                [
-                    'M',
-                    'OK'
-                ]
+        self.available_soil_moisture_flags = [
+            "C01",
+            "C02",
+            "C03",
+            "D01",
+            "D02",
+            "D03",
+            "D04",
+            "D05",
+            "D06",
+            "D07",
+            "D08",
+            "D09",
+            "D10",
+            "G",
+        ]
+        self.faulty_soil_moisture_flags = ["M", "OK"]
 
         super().__init__(database, process_parallel)
 
-    
     @timeit
-    def make_flag_dict(self):  
-        faulty_flag_file = os.path.join(self.database_name, 'faulty_flags.txt')
+    def make_flag_dict(self):
+        faulty_flag_file = os.path.join(self.database_name, "faulty_flags.txt")
         if os.path.isfile(faulty_flag_file):
             os.remove(faulty_flag_file)
-            with open(faulty_flag_file, 'w') as fff:
-                fff.write('flag_string\tfaulty_part\tnetwork\tstation\tsensor\n')
-    
+            with open(faulty_flag_file, "w") as fff:
+                fff.write("flag_string\tfaulty_part\tnetwork\tstation\tsensor\n")
 
-        if  self.file_exists(
-            os.path.join(self.database_name, 'json_dicts', 'flag_dict.json')
-            ):
-            print('flag_dict.json exists')
-            with open(os.path.join(self.database_name, 'json_dicts', \
-                                   'flag_dict.json')) as json_file:
-                self.flag_dict = json.load(json_file)  
+        if self.file_exists(
+            os.path.join(self.database_name, "json_dicts", "flag_dict.json")
+        ):
+            print("flag_dict.json exists")
+            with open(
+                os.path.join(self.database_name, "json_dicts", "flag_dict.json")
+            ) as json_file:
+                self.flag_dict = json.load(json_file)
 
         else:
-            print('flag_dict.json does not exist')
+            print("flag_dict.json does not exist")
             self.flag_dict = self.multi_dict(4, dict)
             for network, station, sensor in self.database.collection.iter_sensors():
                 # print(network.name, station.name, sensor.name)
 
-                sensor_flag_dict_entangled = sensor.data['soil_moisture_flag']\
-                    .value_counts(ascending = False).to_dict()
+                sensor_flag_dict_entangled = (
+                    sensor.data["soil_moisture_flag"]
+                    .value_counts(ascending=False)
+                    .to_dict()
+                )
                 sensor_flag_dict_disentangled = defaultdict(int)
 
-
                 for key, item in sensor_flag_dict_entangled.items():
-                    if ',' not in key and ' ' not in key and key in self.available_soil_moisture_flags:
+                    if (
+                        "," not in key
+                        and " " not in key
+                        and key in self.available_soil_moisture_flags
+                    ):
                         sensor_flag_dict_disentangled[key] += int(item)
 
-                    elif ',' in key and ' ' not in key:
-                        for splitter in key.split(','):
+                    elif "," in key and " " not in key:
+                        for splitter in key.split(","):
                             if splitter.strip() in self.available_soil_moisture_flags:
-                                sensor_flag_dict_disentangled[splitter.strip()] \
-                                    += int(item)
+                                sensor_flag_dict_disentangled[splitter.strip()] += int(
+                                    item
+                                )
 
-                            elif splitter.strip() not in self.faulty_soil_moisture_flags:
-                                with open(faulty_flag_file, 'a') as fff:
-                                    fff.write(f'{key}\t{splitter}\t{network.name}\t{station.name}\t{sensor.name}\n')
+                            elif (
+                                splitter.strip() not in self.faulty_soil_moisture_flags
+                            ):
+                                with open(faulty_flag_file, "a") as fff:
+                                    fff.write(
+                                        f"{key}\t{splitter}\t{network.name}\t{station.name}\t{sensor.name}\n"
+                                    )
 
-                    elif ' ' in key and ',' not in key:
-                        for splitter in key.split(' '):
+                    elif " " in key and "," not in key:
+                        for splitter in key.split(" "):
                             if splitter in self.available_soil_moisture_flags:
                                 sensor_flag_dict_disentangled[splitter] += int(item)
 
                             elif splitter not in self.faulty_soil_moisture_flags:
-                                with open(faulty_flag_file, 'a') as fff:
-                                    fff.write(f'{key}\t{splitter}\t{network.name}\t{station.name}\t{sensor.name}\n')
-
+                                with open(faulty_flag_file, "a") as fff:
+                                    fff.write(
+                                        f"{key}\t{splitter}\t{network.name}\t{station.name}\t{sensor.name}\n"
+                                    )
 
                     else:
-                        with open(faulty_flag_file, 'a') as fff:
-                            fff.write(f'{key}\t{key}\t{network.name}\t{station.name}\t{sensor.name}\n')
+                        with open(faulty_flag_file, "a") as fff:
+                            fff.write(
+                                f"{key}\t{key}\t{network.name}\t{station.name}\t{sensor.name}\n"
+                            )
 
-                sensor_flag_dict_disentangled = \
-                        dict(sorted( \
-                        sensor_flag_dict_disentangled.items(), \
-                        key=lambda item: item[1], \
-                        reverse = True\
-                        ))
-                
-                self.flag_dict[network.name][station.name][sensor.name] \
-                    = sensor_flag_dict_disentangled
-                
-            self.make_json(dict(self.flag_dict), 'flag_dict.json', \
-                           os.path.join(self.database_name, \
-                                        'json_dicts'))
-            
+                sensor_flag_dict_disentangled = dict(
+                    sorted(
+                        sensor_flag_dict_disentangled.items(),
+                        key=lambda item: item[1],
+                        reverse=True,
+                    )
+                )
+
+                self.flag_dict[network.name][station.name][
+                    sensor.name
+                ] = sensor_flag_dict_disentangled
+
+            self.make_json(
+                dict(self.flag_dict),
+                "flag_dict.json",
+                os.path.join(self.database_name, "json_dicts"),
+            )
 
         if not os.path.isfile(faulty_flag_file):
-            print('\n\n\There were no faulty flags identified in the database\n\n')
-
+            print("\n\n\There were no faulty flags identified in the database\n\n")
 
     @timeit
-    def get_flag_df(self, n_cores: Optional[int] = 8, save_as_csv: Optional[False] = False) -> pd.DataFrame:  
-        if  self.file_exists(
-            os.path.join(self.root, self.database_name, 'json_dicts', 'flag_df.pkl')
-            ):
-            print('flag_df.pkl exists')
-            self.flag_df = pd.read_pickle(os.path.join(self.root, self.database_name, 'json_dicts', 'flag_df.pkl'))
+    def get_flag_df(
+        self, n_cores: Optional[int] = 8, save_as_csv: Optional[False] = False
+    ) -> pd.DataFrame:
+        if self.file_exists(
+            os.path.join(self.root, self.database_name, "json_dicts", "flag_df.pkl")
+        ):
+            print("flag_df.pkl exists")
+            self.flag_df = pd.read_pickle(
+                os.path.join(self.root, self.database_name, "json_dicts", "flag_df.pkl")
+            )
 
         else:
             print(os.getcwd())
-            print('\nConstructing and subsequently pickling the dataframe. This might take some time')
+            print(
+                "\nConstructing and subsequently pickling the dataframe. This might take some time, but is only done once."
+            )
+
+            self.make_sensor_ids()
+
             def multi_reader() -> dict:
-                pool = Pool(n_cores) # number of cores you want to use
-                
-                sensor_list = self.get_all_sensors() 
-                all_flags_list = [flags.to_series(0).to_list() for flags in pool.map(flag_reader, sensor_list)]      #creates a list of the loaded df's  
-                all_flags_dict = {'Soil_Moisture_Flags': self.available_soil_moisture_flags}
+                pool = Pool(n_cores)  # number of cores you want to use
+
+                sensor_list = self.get_all_sensors()
+                all_flags_list = [
+                    flags.to_series(0).to_list()
+                    for flags in pool.map(flag_reader, sensor_list)
+                ]  # creates a list of the loaded df's
+                # all_flags_dict = {'Soil_Moisture_Flags': self.available_soil_moisture_flags}
+                all_flags_dict = {}
 
                 for flags, filename in zip(all_flags_list, sensor_list):
                     _temp_dict = {key: 0 for key in self.available_soil_moisture_flags}
                     for flag in flags:
-                        if ',' in flag:
-                            split_flag = flag.split(',')
+                        if "," in flag:
+                            split_flag = flag.split(",")
                             for splitter in split_flag:
                                 _temp_dict[splitter] += 1
                         else:
                             _temp_dict[flag] += 1
 
-
                     filename = filename.split(self.root)[1][1:]
-                    all_flags_dict[filename] = list(_temp_dict.values())
+                    sensor_id = self.sensor_path_to_id_dict[filename]
+                    all_flags_dict[sensor_id] = list(_temp_dict.values())
 
-
-                flags_df = pd.DataFrame(all_flags_dict)
-                flags_df = flags_df.set_index('Soil_Moisture_Flags')
+                flags_df = pd.DataFrame.from_dict(data=all_flags_dict, orient="index")
+                cols = self.available_soil_moisture_flags
+                flags_df.columns = cols
+                # flags_df = flags_df[1:]
+                # flags_df = flags_df.set_index('Soil_Moisture_Flags')
 
                 return flags_df
 
-
             self.flag_df = multi_reader()
-            self.flag_df.to_pickle(os.path.join(self.database_name, 'json_dicts', 'flag_df.pkl'))
+            self.flag_df.to_pickle(
+                os.path.join(self.database_name, "json_dicts", "flag_df.pkl")
+            )
 
-        # test
         if save_as_csv:
-            self.flag_df.to_csv(os.path.join(self.database_name, 'json_dicts', 'flag_df.csv'))
-
-
+            print('Additionally saving dataframe to "flag_df.csv".')
+            self.flag_df.to_csv(
+                os.path.join(self.database_name, "json_dicts", "flag_df.csv")
+            )
 
         return self.flag_df
+
 
 class GroupDynamicVariable(Flags):
     def __init__(self):
