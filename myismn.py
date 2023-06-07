@@ -120,101 +120,6 @@ class Tools:
 
         return segments[::-1]
 
-    def make_sensor_ids(self) -> tuple[dict, dict, pd.DataFrame]:
-        _sensor_ids_arr = list(np.zeros(len(self.get_all_sensors())))
-        _network_counter, _station_counter, _sensor_counter = [], [], []
-        sensor_filename_segments = [
-            "network",
-            "station",
-            "variablename",
-            "depthfrom",
-            "depthto",
-            "sensorname",
-            "startdate",
-            "enddate",
-            "path",
-        ]
-        for p, pth in enumerate(self.get_all_sensors()):
-            segments = self.get_path_segments(pth)
-            _network, _station = (
-                segments[-3],
-                segments[-2],
-            )
-
-            _sensor = segments[-1]
-            _sensor_enddate = _sensor.split("_")[-1].split(".stm")[0]
-            _sensor_startdate = _sensor.split("_")[-2]
-            _sensor_name = _sensor.split("_")[-3]
-            _sensor_dephto = _sensor.split("_")[-4]
-            _sensor_dephfrom = _sensor.split("_")[-5]
-            _sensor_variablename = _sensor.split("_")[-6]
-
-            _network_counter.append(_network)
-            _station_counter.append(f"{_network}_{_station}")
-            _sensor_counter.append(f"{_network}_{_station}_{_sensor}")
-
-            _network_counter_set, _station_counter_set, _sensor_counter_set = (
-                set(_network_counter),
-                set(_station_counter),
-                set(_sensor_counter),
-            )
-
-            _sensor_ids_arr[p] = (
-                {
-                    sensor_filename_segments[0]: _network,
-                    sensor_filename_segments[1]: _station,
-                    sensor_filename_segments[2]: _sensor_variablename,
-                    sensor_filename_segments[3]: float(_sensor_dephfrom),
-                    sensor_filename_segments[4]: float(_sensor_dephto),
-                    sensor_filename_segments[5]: _sensor_name,
-                    sensor_filename_segments[6]: datetime.datetime.strptime(
-                        _sensor_startdate, "%Y%m%d"
-                    ).strftime("%Y/%m/%d"),
-                    sensor_filename_segments[7]: datetime.datetime.strptime(
-                        _sensor_enddate, "%Y%m%d"
-                    ).strftime("%Y/%m/%d"),
-                    sensor_filename_segments[8]: os.path.join(
-                        *self.get_path_segments(pth)[-4:]
-                    ),
-                },
-                f"n{str(len(_network_counter_set)).zfill(3)}s{str(len(_station_counter_set)).zfill(4)}d{str(len(_sensor_counter_set)).zfill(5)}",
-            )
-
-        self.sensor_id_to_path_dict = {
-            sensor_id: item["path"] for item, sensor_id in _sensor_ids_arr
-        }
-
-        self.make_json(
-            self.sensor_id_to_path_dict,
-            "sensor_id_to_path_dict.json",
-            os.path.join(self.database_name, "json_dicts"),
-        )
-
-        self.sensor_path_to_id_dict = {
-            item["path"]: sensor_id for item, sensor_id in _sensor_ids_arr
-        }
-
-        self.make_json(
-            self.sensor_path_to_id_dict,
-            "sensor_path_to_id_dict.json",
-            os.path.join(self.database_name, "json_dicts"),
-        )
-
-        _temp = {sensor_id: [*item.values()] for item, sensor_id in _sensor_ids_arr}
-
-        self.sensor_df = pd.DataFrame.from_dict(data=_temp, orient="index")
-        self.sensor_df.columns = sensor_filename_segments
-
-        self.sensor_df.to_pickle(
-            os.path.join(self.database_name, "json_dicts", "sensor_df.pkl")
-        )
-
-        self.sensor_df.to_csv(
-            os.path.join(self.database_name, "json_dicts", "sensor_df.csv")
-        )
-
-        return self.sensor_path_to_id_dict, self.sensor_id_to_path_dict, self.sensor_df
-
     def get_network_from_filename(self, filename: str) -> str:
         return filename.split("/")[-1].split("_")[0]
 
@@ -620,12 +525,13 @@ class DataReader(Tools):
                 self.stations_dict,
                 self.sensors_dict,
             ) = self.get_all_numbers(self.database)
+            self.numbers_dict = {
+                "Networks": self.no_of_networks,
+                "Stations": self.no_of_stations,
+                "Sensors": self.no_of_sensors,
+            }
             self.make_json(
-                {
-                    "Networks": self.no_of_networks,
-                    "Stations": self.no_of_stations,
-                    "Sensors": self.no_of_sensors,
-                },
+                self.numbers_dict,
                 "numbers.json",
                 os.path.join(self.database_name, "json_dicts"),
             )
@@ -796,7 +702,7 @@ class Flags(DataReader):
 
     @timeit
     def get_flag_df(
-        self, n_cores: Optional[int] = 8, save_as_csv: Optional[False] = False
+        self, n_cores: Optional[int] = 8, save_as_csv: Optional[bool] = False
     ) -> pd.DataFrame:
         if self.file_exists(
             os.path.join(self.root, self.database_name, "json_dicts", "flag_df.pkl")
@@ -822,8 +728,7 @@ class Flags(DataReader):
                     flags.to_series(0).to_list()
                     for flags in pool.map(flag_reader, sensor_list)
                 ]  # creates a list of the loaded df's
-                # all_flags_dict = {'Soil_Moisture_Flags': self.available_soil_moisture_flags}
-                all_flags_dict = {}
+                all_flags_lst = []
 
                 for flags, filename in zip(all_flags_list, sensor_list):
                     _temp_dict = {key: 0 for key in self.available_soil_moisture_flags}
@@ -836,14 +741,17 @@ class Flags(DataReader):
                             _temp_dict[flag] += 1
 
                     filename = filename.split(self.root)[1][1:]
+                    _network = self.get_path_segments(filename)[-3]
+                    _station = self.get_path_segments(filename)[-2]
+                    _temp_lst = [x for x in _temp_dict.values()]
                     sensor_id = self.sensor_path_to_id_dict[filename]
-                    all_flags_dict[sensor_id] = list(_temp_dict.values())
+                    _temp_lst += [_network, _station, sensor_id]
+                    all_flags_lst.append(_temp_lst)
 
-                flags_df = pd.DataFrame.from_dict(data=all_flags_dict, orient="index")
-                cols = self.available_soil_moisture_flags
+                flags_df = pd.DataFrame(all_flags_lst)
+                cols = self.available_soil_moisture_flags + ["network", "station", "sensor_id"]     # both are mutable objects, DONT USE _iadd__!!
                 flags_df.columns = cols
-                # flags_df = flags_df[1:]
-                # flags_df = flags_df.set_index('Soil_Moisture_Flags')
+                flags_df = flags_df.set_index(["network", "station", "sensor_id"])
 
                 return flags_df
 
@@ -859,6 +767,237 @@ class Flags(DataReader):
             )
 
         return self.flag_df
+
+    @timeit
+    def get_flag_normalization_df(
+        self, save_as_csv: Optional[bool] = False
+    ) -> pd.DataFrame:
+        if self.file_exists(
+            os.path.join(
+                self.root, self.database_name, "json_dicts", "flag_normalization_df.pkl"
+            )
+        ):
+            print("flag_normalization_df.pkl exists")
+            self.flag_normalization_df = pd.read_pickle(
+                os.path.join(
+                    self.root,
+                    self.database_name,
+                    "json_dicts",
+                    "flag_normalization_df.pkl",
+                )
+            )
+
+        else:
+            print(os.getcwd())
+            print(
+                "\nConstructing and subsequently pickling the dataframe. This might take some time, but is only done once."
+            )
+
+            _temp_list = []
+            self.make_sensor_ids()
+            for idx, pth in self.sensor_id_to_path_dict.items():
+                _network_name = self.get_path_segments(pth)[-3]
+                _station_name = self.get_path_segments(pth)[-2]
+
+                _length_timeseries = np.sum(
+                    self.flag_df.loc[_network_name, _station_name, idx].to_numpy()
+                )
+                # _network_name = self.sensor_df.loc[idx]['network']
+                # _station_name = self.sensor_df.loc[idx]['station']
+                _sensors_per_station = int(
+                    self.sensors_dict[f"{_network_name}:{_station_name}"]
+                )
+                _stations_per_network = int(self.stations_dict[_network_name])
+
+                _temp_list.append(
+                    [
+                        _network_name,
+                        _station_name,
+                        idx,
+                        _length_timeseries,
+                        _sensors_per_station,
+                        _stations_per_network,
+                        self.no_of_networks,
+                        1
+                        / np.product(
+                            [
+                                _length_timeseries,
+                                _sensors_per_station,
+                                _stations_per_network,
+                                # self.no_of_networks,
+                            ]
+                        ),
+                    ]
+                )
+
+            self.flag_normalization_df = pd.DataFrame(_temp_list)
+            cols = [
+                "network",
+                "station",
+                "sensor_id",
+                "length_timeseries",
+                "sensors_per_station",
+                "stations_per_network",
+                "no_of_networks",
+                "norm_factor",
+            ]
+            self.flag_normalization_df.columns = cols
+            self.flag_normalization_df = self.flag_normalization_df.set_index(
+                ["network", "station", "sensor_id"]
+            )
+
+            self.flag_normalization_df.to_pickle(
+                os.path.join(
+                    self.database_name, "json_dicts", "flag_normalization_df.pkl"
+                )
+            )
+
+        if save_as_csv:
+            print('Additionally saving dataframe to "flag_normalization_df.csv".')
+            self.flag_normalization_df.to_csv(
+                os.path.join(
+                    self.database_name, "json_dicts", "flag_normalization_df.csv"
+                )
+            )
+
+        return self.flag_normalization_df
+
+    @timeit
+    def normalize_flag_df(self, save_as_csv: Optional[bool] = False) -> pd.DataFrame:
+        self.get_flag_df(save_as_csv=save_as_csv)
+        self.get_flag_normalization_df(save_as_csv=save_as_csv)
+        self.make_sensor_ids()
+        normalizer_df = np.array(
+            [
+                self.flag_normalization_df["norm_factor"]
+                for flag_tag in self.available_soil_moisture_flags
+            ]
+        )
+        normalizer_df = pd.DataFrame(normalizer_df).T
+        cols = self.available_soil_moisture_flags + ["sensor_id", "network", "station"]     # both are mutable objects, DONT USE _iadd__!!
+        normalizer_df["sensor_id"] = list(self.sensor_id_to_path_dict.keys())
+        normalizer_df["network"] = [
+            self.get_path_segments(self.sensor_id_to_path_dict[sensor_id])[-3]
+            for sensor_id in list(normalizer_df["sensor_id"])
+        ]
+        normalizer_df["station"] = [
+            self.get_path_segments(self.sensor_id_to_path_dict[sensor_id])[-2]
+            for sensor_id in list(normalizer_df["sensor_id"])
+        ]
+
+        normalizer_df.columns = cols
+        normalizer_df = normalizer_df.set_index(["network", "station", "sensor_id"])
+
+        self.normalized_flag_df = self.flag_df.multiply(normalizer_df)
+
+        self.normalized_flag_df.to_pickle(
+            os.path.join(self.database_name, "json_dicts", "normalized_flag_df.pkl")
+        )
+
+        if save_as_csv:
+            print('Additionally saving dataframe to "normalized_flag_df.csv".')
+            self.flag_normalization_df.to_csv(
+                os.path.join(self.database_name, "json_dicts", "normalized_flag_df.csv")
+            )
+
+        return self.normalized_flag_df
+
+    def make_sensor_ids(self) -> tuple[dict, dict, pd.DataFrame]:
+        _sensor_ids_arr = list(np.zeros(len(self.get_all_sensors())))
+        _network_counter, _station_counter, _sensor_counter = [], [], []
+        sensor_filename_segments = [
+            "network",
+            "station",
+            "variablename",
+            "depthfrom",
+            "depthto",
+            "sensorname",
+            "startdate",
+            "enddate",
+            "path",
+            "sensor_id",
+        ]
+        for p, pth in enumerate(self.get_all_sensors()):
+            segments = self.get_path_segments(pth)
+            _network, _station = (
+                segments[-3],
+                segments[-2],
+            )
+
+            _sensor = segments[-1]
+            _sensor_enddate = _sensor.split("_")[-1].split(".stm")[0]
+            _sensor_startdate = _sensor.split("_")[-2]
+            _sensor_name = _sensor.split("_")[-3]
+            _sensor_dephto = _sensor.split("_")[-4]
+            _sensor_dephfrom = _sensor.split("_")[-5]
+            _sensor_variablename = _sensor.split("_")[-6]
+
+            _network_counter.append(_network)
+            _station_counter.append(f"{_network}_{_station}")
+            _sensor_counter.append(f"{_network}_{_station}_{_sensor}")
+
+            _network_counter_set, _station_counter_set, _sensor_counter_set = (
+                set(_network_counter),
+                set(_station_counter),
+                set(_sensor_counter),
+            )
+
+            _sensor_ids_arr[p] = {
+                sensor_filename_segments[0]: _network,
+                sensor_filename_segments[1]: _station,
+                sensor_filename_segments[2]: _sensor_variablename,
+                sensor_filename_segments[3]: float(_sensor_dephfrom),
+                sensor_filename_segments[4]: float(_sensor_dephto),
+                sensor_filename_segments[5]: _sensor_name,
+                sensor_filename_segments[6]: datetime.datetime.strptime(
+                    _sensor_startdate, "%Y%m%d"
+                ).strftime("%Y/%m/%d"),
+                sensor_filename_segments[7]: datetime.datetime.strptime(
+                    _sensor_enddate, "%Y%m%d"
+                ).strftime("%Y/%m/%d"),
+                sensor_filename_segments[8]: os.path.join(
+                    *self.get_path_segments(pth)[-4:]
+                ),
+                sensor_filename_segments[
+                    9
+                ]: f"n{str(len(_network_counter_set)).zfill(3)}s{str(len(_station_counter_set)).zfill(4)}d{str(len(_sensor_counter_set)).zfill(5)}",
+            }
+
+        self.sensor_id_to_path_dict = {
+            sdict["sensor_id"]: sdict["path"] for sdict in _sensor_ids_arr
+        }
+
+        self.make_json(
+            self.sensor_id_to_path_dict,
+            "sensor_id_to_path_dict.json",
+            os.path.join(self.database_name, "json_dicts"),
+        )
+
+        self.sensor_path_to_id_dict = {
+            sdict["path"]: sdict["sensor_id"] for sdict in _sensor_ids_arr
+        }
+
+        self.make_json(
+            self.sensor_path_to_id_dict,
+            "sensor_path_to_id_dict.json",
+            os.path.join(self.database_name, "json_dicts"),
+        )
+
+        _temp = [[*item.values()] for item in _sensor_ids_arr]
+
+        self.sensor_df = pd.DataFrame(data=_temp)
+        self.sensor_df.columns = sensor_filename_segments
+        self.sensor_df = self.sensor_df.set_index(["network", "station", "sensor_id"])
+
+        self.sensor_df.to_pickle(
+            os.path.join(self.database_name, "json_dicts", "sensor_df.pkl")
+        )
+
+        self.sensor_df.to_csv(
+            os.path.join(self.database_name, "json_dicts", "sensor_df.csv")
+        )
+
+        return self.sensor_path_to_id_dict, self.sensor_id_to_path_dict, self.sensor_df
 
 
 class GroupDynamicVariable(Flags):
