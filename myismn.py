@@ -120,6 +120,10 @@ class Tools:
 
         return segments[::-1]
 
+    def get_size_in_megabytes(self, var: Any) -> None:
+        print(f'This variable "{str(var)}" of type {type(var)} occupies {sys.getsizeof(var) / 1e3} MB of memory')
+
+
     def get_network_from_filename(self, filename: str) -> str:
         return filename.split("/")[-1].split("_")[0]
 
