@@ -10,7 +10,7 @@ def sizeit(func):
         result = func(*args, **kwargs)
         for arg in args:
             print(f'This variable "{str(arg)}" of type {type(arg)} \
-                occupies {sys.getsizeof(arg) / 1e3} MB of memory')
+                occupies {sys.getsizeof(arg) / 1e3} MB of memory')      #! getsizeof does not yield the correct size 
         return result
 
     return sizeit_wrapper
@@ -24,8 +24,14 @@ def timeit(func):
         result = func(*args, **kwargs)
         end_time = time.perf_counter()
         total_time = end_time - start_time
-        print(f"\n\n\tFunction {func.__name__}{args} {kwargs} \
-                Took {total_time:.4f} seconds\n\n")
+        if total_time < 59:
+            print(f"\n\n\tFunction {func.__name__}{args} {kwargs} \
+                Took {total_time:.2f} seconds\n\n")
+        else:
+            mins = total_time // 60
+            secs = total_time - (mins * 60)
+            print(f"\n\n\tFunction {func.__name__}{args} {kwargs} \
+                    Took {mins} min  {secs:.2f}seconds\n\n")
         return result
 
     return timeit_wrapper

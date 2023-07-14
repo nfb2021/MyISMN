@@ -7,10 +7,16 @@ import os
 import json
 from collections import defaultdict
 from multiprocessing import Pool
-from datahandler import DataReader
-from decorators import sizeit, timeit
+from .decorators import sizeit, timeit
+from .datahandler import DataReader
+
+import logging
+from autologging import traced, TRACE, logged
+logging.basicConfig(level=TRACE, filename = 'logger.log', format='%(asctime)s - %(levelname)s:%(name)s:%(funcName)s:%(message)s"')
 
 
+# @logged
+# @traced
 def flag_reader(sensor_path: str) -> pl.DataFrame:
     """Takes a string/path of a sensor file as input and returns the parsed file as a polars DataFrame"""  # noqa: E501
     return pl.read_csv(
@@ -23,7 +29,8 @@ def flag_reader(sensor_path: str) -> pl.DataFrame:
         use_pyarrow=True,
     )
 
-
+# @logged
+# @traced
 class Flags(DataReader):
     """Defines flags used by the ISMN data quality control"""
 
@@ -52,7 +59,7 @@ class Flags(DataReader):
 
     @timeit
     def make_flag_dict(self):
-        faulty_flag_file = os.path.join(self.database_name, "faulty_flags.txt")
+        faulty_flag_file = os.path.join(self.database_parh, "faulty_flags.txt")
         if os.path.isfile(faulty_flag_file):
             os.remove(faulty_flag_file)
             with open(faulty_flag_file, "w") as fff:
@@ -60,11 +67,11 @@ class Flags(DataReader):
                     "flag_string\tfaulty_part\tnetwork\tstation\tsensor\n")
 
         if self.file_exists(
-                os.path.join(self.database_name, "json_dicts",
+                os.path.join(self.database_path, "json_dicts",
                              "flag_dict.json")):
             print("flag_dict.json exists")
             with open(
-                    os.path.join(self.database_name, "json_dicts",
+                    os.path.join(self.database_path, "json_dicts",
                                  "flag_dict.json")) as json_file:
                 self.flag_dict = json.load(json_file)
 
@@ -129,8 +136,7 @@ class Flags(DataReader):
 
             self.make_json(
                 dict(self.flag_dict),
-                "flag_dict.json",
-                os.path.join(self.database_name, "json_dicts"),
+                "flag_dict.json"
             )
 
         if not os.path.isfile(faulty_flag_file):
@@ -143,11 +149,11 @@ class Flags(DataReader):
                     n_cores: Optional[int] = 8,
                     save_as_csv: Optional[bool] = False) -> pd.DataFrame:
         if self.file_exists(
-                os.path.join(self.root, self.database_name, "json_dicts",
+                os.path.join(self.root, self.database_path, "json_dicts",
                              "flag_df.pkl")):
             print("flag_df.pkl exists")
             self.flag_df = pd.read_pickle(
-                os.path.join(self.root, self.database_name, "json_dicts",
+                os.path.join(self.root, self.database_path, "json_dicts",
                              "flag_df.pkl"))
 
         else:
@@ -200,12 +206,12 @@ class Flags(DataReader):
 
             self.flag_df = multi_reader()
             self.flag_df.to_pickle(
-                os.path.join(self.database_name, "json_dicts", "flag_df.pkl"))
+                os.path.join(self.database_path, "json_dicts", "flag_df.pkl"))
 
         if save_as_csv:
             print('Additionally saving dataframe to "flag_df.csv".')
             self.flag_df.to_csv(
-                os.path.join(self.database_name, "json_dicts", "flag_df.csv"))
+                os.path.join(self.database_path, "json_dicts", "flag_df.csv"))
 
         return self.flag_df
 
@@ -214,13 +220,11 @@ class Flags(DataReader):
                                   save_as_csv: Optional[bool] = False
                                   ) -> pd.DataFrame:
         if self.file_exists(
-                os.path.join(self.root, self.database_name, "json_dicts",
+                os.path.join(self.database_path, "json_dicts",
                              "flag_normalization_df.pkl")):
             print("flag_normalization_df.pkl exists")
             self.flag_normalization_df = pd.read_pickle(
-                os.path.join(
-                    self.root,
-                    self.database_name,
+                os.path.join(self.database_path,
                     "json_dicts",
                     "flag_normalization_df.pkl",
                 ))
@@ -232,6 +236,12 @@ class Flags(DataReader):
 
             _temp_list = []
             self.make_sensor_ids()
+            try:
+                if self.sensors_dict:
+                    pass
+            except AttributeError:
+                self.sensors_dict = self.get_all_numbers()[-1]
+        
             for idx, pth in self.sensor_id_to_path_dict.items():
                 _network_name = self.get_path_segments(pth)[-3]
                 _station_name = self.get_path_segments(pth)[-2]
@@ -241,8 +251,11 @@ class Flags(DataReader):
                                                              idx].to_numpy())
                 # _network_name = self.sensor_df.loc[idx]['network']
                 # _station_name = self.sensor_df.loc[idx]['station']
+
                 _sensors_per_station = int(
-                    self.sensors_dict[f"{_network_name}:{_station_name}"])
+                self.sensors_dict[f"{_network_name}:{_station_name}"])
+
+                    
                 _stations_per_network = int(self.stations_dict[_network_name])
 
                 _temp_list.append([
@@ -277,7 +290,7 @@ class Flags(DataReader):
                 ["network", "station", "sensor_id"])
 
             self.flag_normalization_df.to_pickle(
-                os.path.join(self.database_name, "json_dicts",
+                os.path.join(self.database_path, "json_dicts",
                              "flag_normalization_df.pkl"))
 
         if save_as_csv:
@@ -285,7 +298,7 @@ class Flags(DataReader):
                 'Additionally saving dataframe to "flag_normalization_df.csv".'
             )
             self.flag_normalization_df.to_csv(
-                os.path.join(self.database_name, "json_dicts",
+                os.path.join(self.database_path, "json_dicts",
                              "flag_normalization_df.csv"))
 
         return self.flag_normalization_df
@@ -321,19 +334,22 @@ class Flags(DataReader):
         self.normalized_flag_df = self.flag_df.multiply(normalizer_df)
 
         self.normalized_flag_df.to_pickle(
-            os.path.join(self.database_name, "json_dicts",
+            os.path.join(self.database_path, "json_dicts",
                          "normalized_flag_df.pkl"))
 
         if save_as_csv:
             print('Additionally saving dataframe to "normalized_flag_df.csv".')
             self.flag_normalization_df.to_csv(
-                os.path.join(self.database_name, "json_dicts",
+                os.path.join(self.database_path, "json_dicts",
                              "normalized_flag_df.csv"))
 
         return self.normalized_flag_df
 
     def make_sensor_ids(self) -> tuple[dict, dict, pd.DataFrame]:
+        # self.get_all_numbers()
+
         _sensor_ids_arr = list(np.zeros(len(self.get_all_sensors())))
+        logging.debug(f"get_all_sensors(): {self.get_all_sensors()}")
         _network_counter, _station_counter, _sensor_counter = [], [], []
         sensor_filename_segments = [
             "network",
@@ -419,8 +435,7 @@ class Flags(DataReader):
 
         self.make_json(
             self.sensor_id_to_path_dict,
-            "sensor_id_to_path_dict.json",
-            os.path.join(self.database_name, "json_dicts"),
+            "sensor_id_to_path_dict.json"
         )
 
         self.sensor_path_to_id_dict = {
@@ -430,8 +445,7 @@ class Flags(DataReader):
 
         self.make_json(
             self.sensor_path_to_id_dict,
-            "sensor_path_to_id_dict.json",
-            os.path.join(self.database_name, "json_dicts"),
+            "sensor_path_to_id_dict.json"
         )
 
         _temp = [[*item.values()] for item in _sensor_ids_arr]
@@ -442,9 +456,9 @@ class Flags(DataReader):
             ["network", "station", "sensor_id"])
 
         self.sensor_df.to_pickle(
-            os.path.join(self.database_name, "json_dicts", "sensor_df.pkl"))
+            os.path.join(self.database_path, "json_dicts", "sensor_df.pkl"))
 
         self.sensor_df.to_csv(
-            os.path.join(self.database_name, "json_dicts", "sensor_df.csv"))
+            os.path.join(self.database_path, "json_dicts", "sensor_df.csv"))
 
         return self.sensor_path_to_id_dict, self.sensor_id_to_path_dict, self.sensor_df

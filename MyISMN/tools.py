@@ -7,10 +7,16 @@ from typing import Optional, Any
 import json
 from collections import defaultdict
 from ismn.interface import ISMN_Interface
-from decorators import sizeit, timeit
-from datatypes import MyDataTypes
+from .decorators import sizeit, timeit
+from .datatypes import MyDataTypes
+
+import logging
+from autologging import traced, TRACE, logged
+logging.basicConfig(level=TRACE, filename = 'logger.log', format='%(asctime)s - %(levelname)s:%(name)s:%(funcName)s:%(message)s"')
 
 
+# @logged
+# @traced
 class Tools:
     """Small collection of tools around the ISMN database"""
 
@@ -52,13 +58,15 @@ class Tools:
         """
 
         if os.path.isdir(database_path):
+            self.database_path = database_path
             return True
 
         else:
             return False
 
     @sizeit
-    def get_database(self, database_path: str) -> tuple[ISMN_Interface, str]:
+    # @property
+    def get_database(self) -> tuple[ISMN_Interface, str]:
         """Loads the ISMN database using the ISMN module from the specified path
 
         Parameters
@@ -72,31 +80,33 @@ class Tools:
             An ISMN database object and the name of the database
         """
 
-        __database_name: str = os.path.basename(
-            os.path.normpath(database_path))
-        __database = ISMN_Interface(__database_name, parallel=True)
+        self.database_name: str = os.path.basename(
+            os.path.normpath(self.database_path))
 
-        return __database, __database_name
+        try:
+            __database = ISMN_Interface(self.database_name, parallel=True)
+        except OSError as e:
+            __database = ISMN_Interface(self.database_path, parallel=True)
+
+
+        return __database, self.database_name
+
 
     def __get_networks(self) -> tuple[list, list]:
         r"""Returns list containing all networks present in the database \
             and the amount of networks
         """
-        __root = os.getcwd()
-        __path = os.path.join(__root, self.database_name)
-        os.chdir(__path)
         __networks = natsorted([
-            x for x in os.listdir(__path) if os.path.isdir(x)
+            x for x in natsorted(os.listdir(self.database_path)) if os.path.isdir(os.path.join(self.database_path, x))
             and x not in ["python_metadata", "json_dicts", "graphics"]
         ])
-        os.chdir(__root)
         return __networks, len(__networks)
 
     def get_all_sensors(self) -> list:
         """Returns list of all sensors present in the database"""
         return natsorted([
             os.path.normpath(os.path.join(self.root, f))
-            for f in iglob(os.path.join(self.database_name, "**", "*"),
+            for f in iglob(os.path.join(self.database_path, "**", "*"),
                            recursive=True)
             if os.path.isfile(f) and f.endswith(".stm")
         ])
@@ -141,13 +151,12 @@ class Tools:
 
         return segments[::-1]
 
+    @timeit
     def get_all_numbers(
-        self, database: MyDataTypes.IsmnDataBase
+        self
     ) -> tuple[int, int, int, dict, dict]:
         """Counts the total number of networks, stations, and sensors in the database \
             and creates a dictionary.
-        :param database: An ISMN database object
-        :type database: MyDataTypes.IsmnDataBase
         :return: Number of networks, number of stations, number of sensors, \
             a dictionary containing which network contains how many stations and \ 
             a dictionary containing which network and station contains how many sensors.
@@ -157,7 +166,6 @@ class Tools:
         __network_check = "go"
 
         network_lst, no_of_networks = self.__get_networks()
-        # print(network_lst, no_of_networks)
         no_of_stations: int = 0
         no_of_sensors: int = 0
         stations_dict: dict = {}
@@ -166,7 +174,7 @@ class Tools:
         for ii in trange(no_of_networks, desc="iterating over networks:"):
             network_name = network_lst[ii]
             try:
-                network = database[network_name]
+                network = self.database[network_name]
             except KeyError:
                 print(
                     f"\n\n\t The network {network_name} was not loaded by the \
@@ -191,10 +199,15 @@ class Tools:
         self._func_get_all_numbers_ran = True
 
         self.no_of_networks = no_of_networks
+        # logging.debug(f"no_of_networks: {no_of_networks}")
         self.no_of_stations = no_of_stations
+        # logging.debug(f"no_of_stations: {no_of_stations}")
         self.no_of_sensors = no_of_sensors
+        # logging.debug(f"no_of_sensors: {no_of_sensors}")
         self.stations_dict = stations_dict
+        # logging.debug(f"stations_dict: {stations_dict}")
         self.sensors_dict = sensors_dict
+        # logging.debug(f"sensors_dict: {sensors_dict}")
 
         return (
             self.no_of_networks,
@@ -208,29 +221,27 @@ class Tools:
         self,
         data: dict,
         json_name: str,
-        where_to_be_saved: Optional[str] = os.getcwd()) -> None:
+        ) -> None:
         """Creates a JSON file with the specified data.
         :param data: The data to be saved in the JSON file
         :type data: dict
         :param json_name: The name of the JSON file
         :type json_name: str
-        :param where_to_be_saved: A string containing the path (absolute or relative)\
-              to where the JSON is to be saved, by default the current working directory
-        :type where_to_be_saved: Optional[str]
         :return: None
         :rtype: None
         """
 
-        with open(os.path.join(where_to_be_saved, json_name),
+        path = os.path.join(self.database_path, 'json_dicts', json_name)
+        with open(path,
                   "w") as __outfile:
             json.dump(data, __outfile, indent=2)
 
         print(f'The JSON file "{json_name}" has been created in the directory \
-                "{os.path.join(where_to_be_saved)}".')
+                "{path}".')
 
     def read_json(self, json_name: str,
                   path: Optional[str] = os.getcwd()) -> Any:
-        """Readd the specified JSON file and returns the data.
+        """Read the specified JSON file and returns the data.
         :param json_name: The name of the JSON file
         :type json_name: str
         :param path: The path to the JSON file, by default the current working directory
@@ -266,7 +277,9 @@ class Tools:
         :return: True if the directory exists, False otherwise
         :rtype: bool
         """
-        return os.path.isdir(os.path.join(path, dir_name))
+        path = os.path.join(path, dir_name)
+        logging.debug(f"path: {path}")
+        return os.path.isdir(path)
 
     def multi_dict(self, K: int, type: Any) -> defaultdict:
         """Create a multi-dimensional dictionary, based on a default dictionary.
@@ -296,6 +309,8 @@ class Tools:
         print(json.dumps(dictionary, indent=indent))
 
 
+@logged
+@traced
 class Geography(Tools):
     """Special class for everything Geography"""
 
